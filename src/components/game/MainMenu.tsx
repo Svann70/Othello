@@ -1,196 +1,352 @@
 /**
- * MainMenu Component
- * Game start screen with game mode, difficulty selection, and color choice
+ * OthelloGame Component
+ * Main game container - Optimized for web performance
  */
 
-import { memo, useState } from 'react';
-import { Player } from '@/lib/gameLogic';
-import { cn } from '@/lib/utils';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import {
+  GameState,
+  Player,
+  Move,
+  Position,
+  createInitialGameState,
+  applyMove,
+  getValidMoves,
+  countPieces,
+  getOpponent,
+  getAiMove,
+  getAiEvaluation,
+  evaluateAllMoves,
+} from '@/lib/gameLogic';
+import { FuzzyGameState, calculateFuzzyState } from '@/lib/fuzzyLogic';
+import MainMenu from './MainMenu';
+import GameBoard from './GameBoard';
+import ScorePanel, { GameMode } from './ScorePanel';
+import GameOverlay from './GameOverlay';
 import CreditsFooter from './CreditsFooter';
+import AIVisualization, { MoveEvaluation } from './AIVisualization';
 
-export type GameMode = 'pvp' | 'pve';
+type GamePhase = 'menu' | 'playing' | 'gameover';
 
-interface MainMenuProps {
-  onStartGame: (playerColor: Player, difficulty: number, mode: GameMode) => void;
-}
-
-const DIFFICULTY_OPTIONS = [
-  { level: 2, label: 'Easy', description: 'Casual play' },
-  { level: 4, label: 'Medium', description: 'Balanced challenge' },
-  { level: 6, label: 'Hard', description: 'Expert opponent' },
-];
-
-const MainMenu = memo(function MainMenu({ onStartGame }: MainMenuProps) {
+const OthelloGame = () => {
+  const [gamePhase, setGamePhase] = useState<GamePhase>('menu');
+  const [gameState, setGameState] = useState<GameState>(createInitialGameState);
   const [gameMode, setGameMode] = useState<GameMode>('pve');
-  const [selectedColor, setSelectedColor] = useState<Player>('black');
-  const [selectedDifficulty, setSelectedDifficulty] = useState(4);
+  const [playerColor, setPlayerColor] = useState<Player>('black');
+  const [difficulty, setDifficulty] = useState(2);
+  const [recentlyPlaced, setRecentlyPlaced] = useState<Position | null>(null);
+  const [recentlyFlipped, setRecentlyFlipped] = useState<Position[]>([]);
+  
+  // AI Visualization state - lazy updated
+  const [showAiViz, setShowAiViz] = useState(true);
+  const [fuzzyState, setFuzzyState] = useState<FuzzyGameState | null>(null);
+  const [evalWeights, setEvalWeights] = useState<{
+    position: number;
+    mobility: number;
+    corner: number;
+    stability: number;
+    pieces: number;
+  } | null>(null);
+  const [topMoves, setTopMoves] = useState<MoveEvaluation[]>([]);
+  const [currentEval, setCurrentEval] = useState(0);
+  
+  const aiTimeoutRef = useRef<number | null>(null);
+  const evalTimeoutRef = useRef<number | null>(null);
 
-  const handleStart = () => {
-    onStartGame(selectedColor, selectedDifficulty, gameMode);
-  };
+  // Debounced AI visualization update - runs with delay to not block UI
+  useEffect(() => {
+    if (gamePhase !== 'playing' || gameMode !== 'pve' || gameState.isGameOver) return;
+    
+    // Clear previous timeout
+    if (evalTimeoutRef.current) {
+      clearTimeout(evalTimeoutRef.current);
+    }
+    
+    // Debounce evaluation to prevent lag
+    evalTimeoutRef.current = window.setTimeout(() => {
+      try {
+        const aiPlayer = getOpponent(playerColor);
+        const evaluation = getAiEvaluation(gameState.board, aiPlayer);
+        const fuzzy = calculateFuzzyState(gameState.board, aiPlayer);
+        
+        setFuzzyState(fuzzy);
+        setEvalWeights(evaluation.weights);
+        setCurrentEval(evaluation.finalScore);
+        
+        // Get top moves with minimal depth
+        const moves = evaluateAllMoves(gameState.board, aiPlayer, 1);
+        setTopMoves(moves);
+      } catch {
+        // Ignore errors
+      }
+    }, 100); // 100ms debounce
+    
+    return () => {
+      if (evalTimeoutRef.current) {
+        clearTimeout(evalTimeoutRef.current);
+      }
+    };
+  }, [gameState.board, gamePhase, gameMode, playerColor, gameState.isGameOver]);
+
+  const handleStartGame = useCallback((color: Player, diff: number, mode: GameMode) => {
+    setPlayerColor(color);
+    setDifficulty(diff);
+    setGameMode(mode);
+    setGameState(createInitialGameState());
+    setGamePhase('playing');
+    setRecentlyPlaced(null);
+    setRecentlyFlipped([]);
+    setFuzzyState(null);
+    setEvalWeights(null);
+    setTopMoves([]);
+    setCurrentEval(0);
+  }, []);
+
+  const handleCellClick = useCallback((move: Move) => {
+    if (gameMode === 'pve') {
+      if (gameState.isAiThinking || gameState.currentPlayer !== playerColor) return;
+    }
+
+    const newBoard = applyMove(gameState.board, move, gameState.currentPlayer);
+    const pieces = countPieces(newBoard);
+    const nextPlayer = getOpponent(gameState.currentPlayer);
+    const nextValidMoves = getValidMoves(newBoard, nextPlayer);
+
+    setRecentlyPlaced({ row: move.row, col: move.col });
+    setRecentlyFlipped(move.flips);
+
+    setTimeout(() => {
+      setRecentlyPlaced(null);
+      setRecentlyFlipped([]);
+    }, 400);
+
+    let finalNextPlayer = nextPlayer;
+    let finalValidMoves = nextValidMoves;
+
+    if (nextValidMoves.length === 0) {
+      const currentPlayerMoves = getValidMoves(newBoard, gameState.currentPlayer);
+      if (currentPlayerMoves.length === 0) {
+        const winner = pieces.black > pieces.white 
+          ? 'black' 
+          : pieces.white > pieces.black ? 'white' : 'tie';
+        
+        setGameState(prev => ({
+          ...prev,
+          board: newBoard,
+          blackScore: pieces.black,
+          whiteScore: pieces.white,
+          validMoves: [],
+          lastMove: { row: move.row, col: move.col },
+          isGameOver: true,
+          winner,
+        }));
+        setGamePhase('gameover');
+        return;
+      }
+      finalNextPlayer = gameState.currentPlayer;
+      finalValidMoves = currentPlayerMoves;
+    }
+
+    setGameState(prev => ({
+      ...prev,
+      board: newBoard,
+      currentPlayer: finalNextPlayer,
+      blackScore: pieces.black,
+      whiteScore: pieces.white,
+      validMoves: finalValidMoves,
+      lastMove: { row: move.row, col: move.col },
+    }));
+  }, [gameState, playerColor, gameMode]);
+
+  // AI move logic - optimized
+  useEffect(() => {
+    if (gameMode === 'pvp') return;
+    if (gamePhase !== 'playing' || gameState.isGameOver || gameState.currentPlayer === playerColor) return;
+
+    setGameState(prev => ({ ...prev, isAiThinking: true }));
+
+    // Reduced delay for snappier feel
+    aiTimeoutRef.current = window.setTimeout(() => {
+      const aiMove = getAiMove(gameState.board, gameState.currentPlayer, difficulty);
+
+      if (!aiMove) {
+        const playerMoves = getValidMoves(gameState.board, playerColor);
+        if (playerMoves.length === 0) {
+          const pieces = countPieces(gameState.board);
+          const winner = pieces.black > pieces.white ? 'black' : pieces.white > pieces.black ? 'white' : 'tie';
+          
+          setGameState(prev => ({
+            ...prev,
+            isAiThinking: false,
+            isGameOver: true,
+            winner,
+            validMoves: [],
+          }));
+          setGamePhase('gameover');
+        } else {
+          setGameState(prev => ({
+            ...prev,
+            isAiThinking: false,
+            currentPlayer: playerColor,
+            validMoves: playerMoves,
+          }));
+        }
+        return;
+      }
+
+      const newBoard = applyMove(gameState.board, aiMove, gameState.currentPlayer);
+      const pieces = countPieces(newBoard);
+      const playerMoves = getValidMoves(newBoard, playerColor);
+
+      setRecentlyPlaced({ row: aiMove.row, col: aiMove.col });
+      setRecentlyFlipped(aiMove.flips);
+
+      setTimeout(() => {
+        setRecentlyPlaced(null);
+        setRecentlyFlipped([]);
+      }, 400);
+
+      if (playerMoves.length === 0) {
+        const aiMoves = getValidMoves(newBoard, gameState.currentPlayer);
+        if (aiMoves.length === 0) {
+          const winner = pieces.black > pieces.white ? 'black' : pieces.white > pieces.black ? 'white' : 'tie';
+          
+          setGameState(prev => ({
+            ...prev,
+            board: newBoard,
+            blackScore: pieces.black,
+            whiteScore: pieces.white,
+            lastMove: { row: aiMove.row, col: aiMove.col },
+            isAiThinking: false,
+            isGameOver: true,
+            winner,
+            validMoves: [],
+          }));
+          setGamePhase('gameover');
+        } else {
+          setGameState(prev => ({
+            ...prev,
+            board: newBoard,
+            blackScore: pieces.black,
+            whiteScore: pieces.white,
+            lastMove: { row: aiMove.row, col: aiMove.col },
+            isAiThinking: false,
+            validMoves: aiMoves,
+          }));
+        }
+      } else {
+        setGameState(prev => ({
+          ...prev,
+          board: newBoard,
+          currentPlayer: playerColor,
+          blackScore: pieces.black,
+          whiteScore: pieces.white,
+          validMoves: playerMoves,
+          lastMove: { row: aiMove.row, col: aiMove.col },
+          isAiThinking: false,
+        }));
+      }
+    }, 500); // Reduced from 800ms
+
+    return () => {
+      if (aiTimeoutRef.current) clearTimeout(aiTimeoutRef.current);
+    };
+  }, [gamePhase, gameMode, gameState.currentPlayer, gameState.isGameOver, gameState.board, playerColor, difficulty]);
+
+  const handleRestart = useCallback(() => {
+    setGamePhase('menu');
+    setGameState(createInitialGameState());
+    setRecentlyPlaced(null);
+    setRecentlyFlipped([]);
+    setFuzzyState(null);
+    setEvalWeights(null);
+    setTopMoves([]);
+    setCurrentEval(0);
+  }, []);
+
+  if (gamePhase === 'menu') {
+    return <MainMenu onStartGame={handleStartGame} />;
+  }
+
+  const isBoardDisabled = gameMode === 'pve' 
+    ? gameState.isAiThinking || gameState.currentPlayer !== playerColor
+    : false;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-8">
-      <div className="game-panel rounded-2xl p-8 sm:p-12 max-w-lg w-full flex flex-col">
-        {/* Title */}
-        <div className="text-center mb-10">
-          <h1 className="text-4xl sm:text-5xl font-serif font-bold mb-2">
-            Othello
-          </h1>
-          <p className="text-muted-foreground">
-            Classic strategy board game
-          </p>
-        </div>
-
-        {/* Game Mode Selection */}
-        <div className="mb-8">
-          <h3 className="text-sm font-medium text-muted-foreground mb-3 text-center">
-            Game Mode
-          </h3>
-          <div className="flex justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => setGameMode('pve')}
-              className={cn(
-                'flex-1 p-4 rounded-lg transition-all duration-200',
-                'border-2 text-center',
-                gameMode === 'pve'
-                  ? 'border-accent bg-secondary/50'
-                  : 'border-transparent hover:bg-secondary/30'
-              )}
-            >
-              <div className="font-medium mb-1">vs AI</div>
-              <div className="text-xs text-muted-foreground">Play against computer</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setGameMode('pvp')}
-              className={cn(
-                'flex-1 p-4 rounded-lg transition-all duration-200',
-                'border-2 text-center',
-                gameMode === 'pvp'
-                  ? 'border-accent bg-secondary/50'
-                  : 'border-transparent hover:bg-secondary/30'
-              )}
-            >
-              <div className="font-medium mb-1">2 Players</div>
-              <div className="text-xs text-muted-foreground">Local multiplayer</div>
-            </button>
-          </div>
-        </div>
-
-        {/* Color selection - only show in PvE mode */}
-        {gameMode === 'pve' && (
-          <div className="mb-8">
-            <h3 className="text-sm font-medium text-muted-foreground mb-3 text-center">
-              Choose your color
-            </h3>
-            <div className="flex justify-center gap-4">
-              <button
-                type="button"
-                onClick={() => setSelectedColor('black')}
-                className={cn(
-                  'flex flex-col items-center p-4 rounded-lg transition-all duration-200',
-                  'border-2',
-                  selectedColor === 'black' 
-                    ? 'border-accent bg-secondary/50' 
-                    : 'border-transparent hover:bg-secondary/30'
-                )}
-              >
-                <div 
-                  className="w-12 h-12 rounded-full mb-2 piece-black"
-                  style={{ position: 'relative' }}
-                />
-                <span className="text-sm">Black</span>
-                <span className="text-xs text-muted-foreground">Moves first</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedColor('white')}
-                className={cn(
-                  'flex flex-col items-center p-4 rounded-lg transition-all duration-200',
-                  'border-2',
-                  selectedColor === 'white' 
-                    ? 'border-accent bg-secondary/50' 
-                    : 'border-transparent hover:bg-secondary/30'
-                )}
-              >
-                <div 
-                  className="w-12 h-12 rounded-full mb-2 piece-white"
-                  style={{ position: 'relative' }}
-                />
-                <span className="text-sm">White</span>
-                <span className="text-xs text-muted-foreground">Moves second</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Difficulty selection - only show in PvE mode */}
-        {gameMode === 'pve' && (
-          <div className="mb-10">
-            <h3 className="text-sm font-medium text-muted-foreground mb-3 text-center">
-              Select difficulty
-            </h3>
-            <div className="flex flex-col gap-2">
-              {DIFFICULTY_OPTIONS.map((option) => (
-                <button
-                  key={option.level}
-                  type="button"
-                  onClick={() => setSelectedDifficulty(option.level)}
-                  className={cn(
-                    'flex items-center justify-between p-3 rounded-lg transition-all duration-200',
-                    'border',
-                    selectedDifficulty === option.level
-                      ? 'border-accent bg-secondary/50'
-                      : 'border-border hover:bg-secondary/30'
-                  )}
-                >
-                  <span className="font-medium">{option.label}</span>
-                  <span className="text-sm text-muted-foreground">
-                    {option.description}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* PvP mode info */}
-        {gameMode === 'pvp' && (
-          <div className="mb-10 p-4 rounded-lg bg-secondary/30 text-center">
-            <p className="text-sm text-muted-foreground mb-2">
-              Two players take turns on the same device
-            </p>
-            <div className="flex justify-center gap-4">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full piece-black" />
-                <span className="text-sm">Player 1</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full piece-white" />
-                <span className="text-sm">Player 2</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Start button */}
-        <button
-          type="button"
-          onClick={handleStart}
-          className="btn-game rounded-lg text-primary-foreground text-lg py-4"
-        >
-          Start Game
-        </button>
-
-        {/* Credits */}
-        <CreditsFooter />
+    <div className="min-h-screen flex flex-col lg:flex-row items-center justify-center gap-6 p-4 sm:p-8">
+      {/* Main board */}
+      <div className="w-full max-w-[min(90vw,500px)] lg:max-w-[500px]">
+        <GameBoard
+          board={gameState.board}
+          validMoves={gameState.validMoves}
+          lastMove={gameState.lastMove}
+          onCellClick={handleCellClick}
+          disabled={isBoardDisabled}
+          recentlyPlaced={recentlyPlaced}
+          recentlyFlipped={recentlyFlipped}
+        />
       </div>
+
+      {/* Side panel */}
+      <div className="w-full max-w-[min(90vw,300px)] lg:max-w-[280px] flex flex-col gap-4">
+        <ScorePanel
+          blackScore={gameState.blackScore}
+          whiteScore={gameState.whiteScore}
+          currentPlayer={gameState.currentPlayer}
+          isAiThinking={gameState.isAiThinking}
+          isGameOver={gameState.isGameOver}
+          playerColor={playerColor}
+          gameMode={gameMode}
+        />
+
+        {/* AI Visualization */}
+        {gameMode === 'pve' && (
+          <>
+            <button
+              type="button"
+              onClick={() => setShowAiViz(!showAiViz)}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors text-left px-1"
+            >
+              {showAiViz ? '▼ Hide' : '▶ Show'} AI Analysis
+            </button>
+            <AIVisualization
+              isVisible={showAiViz}
+              isThinking={gameState.isAiThinking}
+              fuzzyState={fuzzyState}
+              weights={evalWeights}
+              topMoves={topMoves}
+              currentEvaluation={currentEval}
+            />
+          </>
+        )}
+
+        {/* Game controls */}
+        <div className="game-panel rounded-xl p-4">
+          <button
+            type="button"
+            onClick={handleRestart}
+            className="w-full py-2 px-4 rounded-lg border border-border text-sm font-medium transition-colors duration-200 hover:bg-secondary/50"
+          >
+            Return to Menu
+          </button>
+        </div>
+
+        <div className="game-panel rounded-xl p-4">
+          <CreditsFooter />
+        </div>
+      </div>
+
+      <GameOverlay
+        isVisible={gamePhase === 'gameover'}
+        winner={gameState.winner}
+        blackScore={gameState.blackScore}
+        whiteScore={gameState.whiteScore}
+        playerColor={playerColor}
+        onRestart={handleRestart}
+        gameMode={gameMode}
+      />
     </div>
   );
-});
+};
 
-export default MainMenu;
+export default OthelloGame;

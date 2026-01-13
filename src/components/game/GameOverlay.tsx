@@ -1,13 +1,12 @@
 /**
  * GameOverlay Component
- * Displays game over state with winner announcement and restart option
- * Supports both PvE and PvP game modes
+ * Displays game over state with results
  */
 
 import { memo } from 'react';
 import { Player } from '@/lib/gameLogic';
 import { cn } from '@/lib/utils';
-import { GameMode } from './MainMenu';
+import { GameMode } from './ScorePanel';
 
 interface GameOverlayProps {
   isVisible: boolean;
@@ -36,22 +35,16 @@ const GameOverlay = memo(function GameOverlay({
 
   const getMessage = () => {
     if (isTie) return 'Draw';
-    if (isPvP) {
-      return winner === 'black' ? 'Player 1 Wins' : 'Player 2 Wins';
-    }
-    return playerWon ? 'Victory' : 'Defeat';
+    if (isPvP) return winner === 'black' ? 'Player 1 Wins' : 'Player 2 Wins';
+    return playerWon ? 'Victory!' : 'Defeat';
   };
 
   const getSubMessage = () => {
     if (isTie) return 'The game ended in a tie';
     if (isPvP) {
-      return winner === 'black' 
-        ? 'Player 1 (Black) has won the match' 
-        : 'Player 2 (White) has won the match';
+      return winner === 'black' ? 'Player 1 (Black) won' : 'Player 2 (White) won';
     }
-    return playerWon 
-      ? 'Congratulations on your victory' 
-      : 'The AI has won this match';
+    return playerWon ? 'Congratulations!' : 'Better luck next time';
   };
 
   return (
@@ -62,43 +55,27 @@ const GameOverlay = memo(function GameOverlay({
         'animate-fade-in'
       )}
     >
-      <div 
-        className={cn(
-          'game-panel rounded-2xl p-8 sm:p-12 text-center max-w-md mx-4',
-          'animate-scale-in'
-        )}
-      >
-        {/* Result heading */}
+      <div className={cn('game-panel rounded-2xl p-8 sm:p-12 text-center max-w-md mx-4', 'animate-scale-in')}>
         <h2 className="text-4xl sm:text-5xl font-serif font-bold mb-2">
           {getMessage()}
         </h2>
         
-        <p className="text-muted-foreground mb-8">
-          {getSubMessage()}
-        </p>
+        <p className="text-muted-foreground mb-8">{getSubMessage()}</p>
 
         {/* Final scores */}
         <div className="flex justify-center gap-8 mb-8">
           <div className="text-center">
-            <div 
-              className="w-12 h-12 rounded-full mx-auto mb-2 piece-black"
-              style={{ position: 'relative' }}
-            />
+            <div className="w-12 h-12 rounded-full mx-auto mb-2 piece-black relative" />
             <span className="text-2xl font-bold">{blackScore}</span>
             <div className="text-xs text-muted-foreground mt-1">
               {isPvP ? 'Player 1' : (playerColor === 'black' ? 'You' : 'AI')}
             </div>
           </div>
           
-          <div className="flex items-center text-2xl text-muted-foreground">
-            -
-          </div>
+          <div className="flex items-center text-2xl text-muted-foreground">—</div>
           
           <div className="text-center">
-            <div 
-              className="w-12 h-12 rounded-full mx-auto mb-2 piece-white"
-              style={{ position: 'relative' }}
-            />
+            <div className="w-12 h-12 rounded-full mx-auto mb-2 piece-white relative" />
             <span className="text-2xl font-bold">{whiteScore}</span>
             <div className="text-xs text-muted-foreground mt-1">
               {isPvP ? 'Player 2' : (playerColor === 'white' ? 'You' : 'AI')}
@@ -106,7 +83,6 @@ const GameOverlay = memo(function GameOverlay({
           </div>
         </div>
 
-        {/* Restart button */}
         <button
           type="button"
           onClick={onRestart}

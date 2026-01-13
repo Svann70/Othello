@@ -1,7 +1,6 @@
 /**
  * GameBoard Component
- * Renders the 8x8 Othello game board with all cells
- * Manages hover state and click interactions
+ * Renders the 8x8 Othello game board
  */
 
 import { useState, useCallback, memo } from 'react';
@@ -18,6 +17,9 @@ interface GameBoardProps {
   recentlyFlipped: Position[];
 }
 
+const COLUMN_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+const ROW_LABELS = ['1', '2', '3', '4', '5', '6', '7', '8'];
+
 const GameBoard = memo(function GameBoard({
   board,
   validMoves,
@@ -29,36 +31,29 @@ const GameBoard = memo(function GameBoard({
 }: GameBoardProps) {
   const [hoveredCell, setHoveredCell] = useState<Position | null>(null);
 
-  // Check if a position has a valid move
   const getValidMove = useCallback((row: number, col: number): Move | undefined => {
     return validMoves.find(m => m.row === row && m.col === col);
   }, [validMoves]);
 
-  // Check if a position is the last move
   const isLastMove = useCallback((row: number, col: number): boolean => {
     return lastMove?.row === row && lastMove?.col === col;
   }, [lastMove]);
 
-  // Check if a cell is currently hovered
   const isHovered = useCallback((row: number, col: number): boolean => {
     return hoveredCell?.row === row && hoveredCell?.col === col;
   }, [hoveredCell]);
 
-  // Check if piece was recently placed
   const isRecentlyPlaced = useCallback((row: number, col: number): boolean => {
     return recentlyPlaced?.row === row && recentlyPlaced?.col === col;
   }, [recentlyPlaced]);
 
-  // Check if piece was recently flipped
   const isRecentlyFlipped = useCallback((row: number, col: number): boolean => {
     return recentlyFlipped.some(p => p.row === row && p.col === col);
   }, [recentlyFlipped]);
 
   const handleCellClick = useCallback((row: number, col: number) => {
     const move = getValidMove(row, col);
-    if (move) {
-      onCellClick(move);
-    }
+    if (move) onCellClick(move);
   }, [getValidMove, onCellClick]);
 
   const handleMouseEnter = useCallback((row: number, col: number) => {
@@ -71,11 +66,10 @@ const GameBoard = memo(function GameBoard({
 
   return (
     <div className="game-panel rounded-xl p-4 sm:p-6">
-      {/* Board frame decoration */}
       <div className="relative">
         {/* Column labels */}
         <div className="flex mb-2 pl-8">
-          {['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((label) => (
+          {COLUMN_LABELS.map((label) => (
             <div 
               key={label} 
               className="flex-1 text-center text-xs sm:text-sm font-medium text-muted-foreground"
@@ -88,7 +82,7 @@ const GameBoard = memo(function GameBoard({
         <div className="flex">
           {/* Row labels */}
           <div className="flex flex-col w-8">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((label) => (
+            {ROW_LABELS.map((label) => (
               <div 
                 key={label} 
                 className="flex-1 flex items-center justify-center text-xs sm:text-sm font-medium text-muted-foreground"

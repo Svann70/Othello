@@ -1,13 +1,13 @@
 /**
  * AIVisualization Component
- * Displays AI evaluation metrics and fuzzy logic state
+ * Lightweight AI evaluation display
  */
 
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { FuzzyGameState } from '@/lib/fuzzyLogic';
 
-interface MoveEvaluation {
+export interface MoveEvaluation {
   row: number;
   col: number;
   score: number;
@@ -28,13 +28,11 @@ interface AIVisualizationProps {
   currentEvaluation: number;
 }
 
-// Convert row/col to algebraic notation
 function toAlgebraic(row: number, col: number): string {
   const columns = 'ABCDEFGH';
   return `${columns[col]}${8 - row}`;
 }
 
-// Fuzzy value bar component
 const FuzzyBar = memo(function FuzzyBar({ 
   label, 
   values,
@@ -45,33 +43,22 @@ const FuzzyBar = memo(function FuzzyBar({
   colors: string[];
 }) {
   return (
-    <div className="mb-3">
-      <div className="flex justify-between text-xs text-muted-foreground mb-1">
-        <span>{label}</span>
-      </div>
-      <div className="flex h-2 rounded-full overflow-hidden bg-secondary/50 gap-0.5">
+    <div className="mb-2">
+      <div className="text-xs text-muted-foreground mb-1">{label}</div>
+      <div className="flex h-1.5 rounded-full overflow-hidden bg-secondary/50 gap-0.5">
         {values.map((v, i) => (
           <div
             key={v.name}
             className={cn('h-full transition-all duration-300', colors[i])}
             style={{ width: `${v.value * 100}%` }}
-            title={`${v.name}: ${(v.value * 100).toFixed(0)}%`}
           />
-        ))}
-      </div>
-      <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5">
-        {values.map((v) => (
-          <span key={v.name} className="opacity-70">
-            {v.name}: {(v.value * 100).toFixed(0)}%
-          </span>
         ))}
       </div>
     </div>
   );
 });
 
-// Weight indicator component
-const WeightIndicator = memo(function WeightIndicator({
+const WeightBar = memo(function WeightBar({
   label,
   value,
   color,
@@ -82,16 +69,14 @@ const WeightIndicator = memo(function WeightIndicator({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-muted-foreground w-16">{label}</span>
-      <div className="flex-1 h-1.5 rounded-full bg-secondary/50 overflow-hidden">
+      <span className="text-xs text-muted-foreground w-14">{label}</span>
+      <div className="flex-1 h-1 rounded-full bg-secondary/50 overflow-hidden">
         <div 
           className={cn('h-full rounded-full transition-all duration-300', color)}
           style={{ width: `${value * 100}%` }}
         />
       </div>
-      <span className="text-xs font-medium w-10 text-right">
-        {(value * 100).toFixed(0)}%
-      </span>
+      <span className="text-xs w-8 text-right">{(value * 100).toFixed(0)}%</span>
     </div>
   );
 });
@@ -105,6 +90,8 @@ const AIVisualization = memo(function AIVisualization({
   currentEvaluation,
 }: AIVisualizationProps) {
   if (!isVisible) return null;
+
+  const limitedMoves = useMemo(() => topMoves.slice(0, 3), [topMoves]);
 
   return (
     <div className="game-panel rounded-xl p-4 text-sm">
@@ -120,11 +107,11 @@ const AIVisualization = memo(function AIVisualization({
       </h3>
 
       {/* Current Evaluation */}
-      <div className="mb-4 p-3 rounded-lg bg-secondary/30">
+      <div className="mb-3 p-2 rounded-lg bg-secondary/30">
         <div className="flex justify-between items-center">
-          <span className="text-muted-foreground text-xs">Board Evaluation</span>
+          <span className="text-muted-foreground text-xs">Evaluation</span>
           <span className={cn(
-            'font-mono font-bold text-lg',
+            'font-mono font-bold',
             currentEvaluation > 0 ? 'text-game-valid' : 
             currentEvaluation < 0 ? 'text-destructive' : 'text-foreground'
           )}>
@@ -133,11 +120,9 @@ const AIVisualization = memo(function AIVisualization({
         </div>
       </div>
 
-      {/* Fuzzy State Visualization */}
+      {/* Fuzzy State - Simplified */}
       {fuzzyState && (
-        <div className="mb-4">
-          <h4 className="text-xs font-medium text-muted-foreground mb-2">Fuzzy State</h4>
-          
+        <div className="mb-3">
           <FuzzyBar
             label="Game Phase"
             values={[
@@ -147,7 +132,6 @@ const AIVisualization = memo(function AIVisualization({
             ]}
             colors={['bg-blue-500', 'bg-yellow-500', 'bg-red-500']}
           />
-          
           <FuzzyBar
             label="Mobility"
             values={[
@@ -157,53 +141,28 @@ const AIVisualization = memo(function AIVisualization({
             ]}
             colors={['bg-red-400', 'bg-yellow-400', 'bg-green-400']}
           />
-          
-          <FuzzyBar
-            label="Corner Control"
-            values={[
-              { name: 'Weak', value: fuzzyState.cornerControl.weak },
-              { name: 'Mod', value: fuzzyState.cornerControl.moderate },
-              { name: 'Strong', value: fuzzyState.cornerControl.strong },
-            ]}
-            colors={['bg-orange-400', 'bg-blue-400', 'bg-emerald-400']}
-          />
-          
-          <FuzzyBar
-            label="Stability"
-            values={[
-              { name: 'Unstable', value: fuzzyState.stability.unstable },
-              { name: 'Neutral', value: fuzzyState.stability.neutral },
-              { name: 'Stable', value: fuzzyState.stability.stable },
-            ]}
-            colors={['bg-rose-400', 'bg-slate-400', 'bg-teal-400']}
-          />
         </div>
       )}
 
-      {/* Dynamic Weights */}
+      {/* Weights - Simplified */}
       {weights && (
-        <div className="mb-4">
-          <h4 className="text-xs font-medium text-muted-foreground mb-2">Evaluation Weights</h4>
-          <div className="space-y-1.5">
-            <WeightIndicator label="Position" value={weights.position} color="bg-purple-500" />
-            <WeightIndicator label="Mobility" value={weights.mobility} color="bg-cyan-500" />
-            <WeightIndicator label="Corners" value={weights.corner} color="bg-amber-500" />
-            <WeightIndicator label="Stability" value={weights.stability} color="bg-emerald-500" />
-            <WeightIndicator label="Pieces" value={weights.pieces} color="bg-rose-500" />
-          </div>
+        <div className="mb-3 space-y-1">
+          <WeightBar label="Position" value={weights.position} color="bg-purple-500" />
+          <WeightBar label="Mobility" value={weights.mobility} color="bg-cyan-500" />
+          <WeightBar label="Corners" value={weights.corner} color="bg-amber-500" />
         </div>
       )}
 
       {/* Top Moves */}
-      {topMoves.length > 0 && (
+      {limitedMoves.length > 0 && (
         <div>
-          <h4 className="text-xs font-medium text-muted-foreground mb-2">Top Moves</h4>
+          <div className="text-xs text-muted-foreground mb-1">Top Moves</div>
           <div className="space-y-1">
-            {topMoves.slice(0, 5).map((move, index) => (
+            {limitedMoves.map((move, index) => (
               <div 
                 key={`${move.row}-${move.col}`}
                 className={cn(
-                  'flex justify-between items-center px-2 py-1 rounded text-xs',
+                  'flex justify-between items-center px-2 py-0.5 rounded text-xs',
                   index === 0 ? 'bg-accent/20 font-medium' : 'bg-secondary/20'
                 )}
               >
@@ -213,7 +172,7 @@ const AIVisualization = memo(function AIVisualization({
                   move.score > 0 ? 'text-game-valid' : 
                   move.score < 0 ? 'text-destructive' : ''
                 )}>
-                  {move.score > 0 ? '+' : ''}{move.score.toFixed(1)}
+                  {move.score > 0 ? '+' : ''}{move.score.toFixed(0)}
                 </span>
               </div>
             ))}
@@ -225,4 +184,3 @@ const AIVisualization = memo(function AIVisualization({
 });
 
 export default AIVisualization;
-export type { MoveEvaluation };

@@ -1,11 +1,10 @@
 /**
  * BoardCell Component
  * Renders a single cell on the Othello game board
- * Handles piece display, valid move indicators, and hover states
  */
 
 import { memo } from 'react';
-import { CellState, Position, Move } from '@/lib/gameLogic';
+import { CellState, Position } from '@/lib/gameLogic';
 import { cn } from '@/lib/utils';
 
 interface BoardCellProps {
@@ -24,8 +23,6 @@ interface BoardCellProps {
 }
 
 const BoardCell = memo(function BoardCell({
-  row,
-  col,
   state,
   isValidMove,
   isLastMove,
@@ -53,9 +50,8 @@ const BoardCell = memo(function BoardCell({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       disabled={!canClick}
-      aria-label={`Cell ${row + 1}, ${col + 1}${state ? `, ${state} piece` : isValidMove ? ', valid move' : ''}`}
     >
-      {/* Grid line overlay for visual separation */}
+      {/* Grid line overlay */}
       <div className="absolute inset-0 border border-[hsl(var(--board-grid))]" />
       
       {/* Piece rendering */}
@@ -70,14 +66,14 @@ const BoardCell = memo(function BoardCell({
         />
       )}
       
-      {/* Hover indicator for valid moves */}
-      {isValidMove && !state && isHovered && (
+      {/* Valid move indicator */}
+      {isValidMove && !state && (
         <div 
           className={cn(
-            'absolute rounded-full opacity-50',
-            'top-[15%] left-[15%] w-[70%] h-[70%]',
-            'border-2 border-dashed',
-            'border-[hsl(var(--accent))]'
+            'absolute rounded-full transition-opacity duration-150',
+            'top-[30%] left-[30%] w-[40%] h-[40%]',
+            'bg-game-valid/30',
+            isHovered && 'bg-game-valid/60'
           )}
         />
       )}
