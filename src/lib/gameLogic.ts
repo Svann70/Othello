@@ -1,7 +1,6 @@
 /**
- * Othello Game Logic
- * Core game mechanics, validation, and AI implementation
- * Uses Minimax with Alpha-Beta Pruning and Fuzzy Logic for AI decisions
+ * Game Logic for Othello
+ * Optimized for web performance with reduced depth
  */
 
 export type Player = 'black' | 'white';
@@ -29,260 +28,26 @@ export interface GameState {
   isAiThinking: boolean;
 }
 
-// Direction vectors for checking valid moves
-const DIRECTIONS: Position[] = [
-  { row: -1, col: 0 },  // Up
-  { row: 1, col: 0 },   // Down
-  { row: 0, col: -1 },  // Left
-  { row: 0, col: 1 },   // Right
-  { row: -1, col: -1 }, // Up-Left
-  { row: -1, col: 1 },  // Up-Right
-  { row: 1, col: -1 },  // Down-Left
-  { row: 1, col: 1 },   // Down-Right
+// Direction vectors for checking moves
+const DIRECTIONS = [
+  [-1, -1], [-1, 0], [-1, 1],
+  [0, -1],          [0, 1],
+  [1, -1],  [1, 0], [1, 1]
+] as const;
+
+// Position weights for evaluation (corners are most valuable)
+const POSITION_WEIGHTS = [
+  [100, -20, 10,  5,  5, 10, -20, 100],
+  [-20, -50, -2, -2, -2, -2, -50, -20],
+  [ 10,  -2,  1,  1,  1,  1,  -2,  10],
+  [  5,  -2,  1,  0,  0,  1,  -2,   5],
+  [  5,  -2,  1,  0,  0,  1,  -2,   5],
+  [ 10,  -2,  1,  1,  1,  1,  -2,  10],
+  [-20, -50, -2, -2, -2, -2, -50, -20],
+  [100, -20, 10,  5,  5, 10, -20, 100],
 ];
 
-// Position weights for AI evaluation (corners and edges are valuable)
-const POSITION_WEIGHTS: number[][] = [
-  [100, -20, 10, 5, 5, 10, -20, 100],
-  [-20, -50, -2, -2, -2, -2, -50, -20],
-  [10, -2, 1, 1, 1, 1, -2, 10],
-  [5, -2, 1, 0, 0, 1, -2, 5],
-  [5, -2, 1, 0, 0, 1, -2, 5],
-  [10, -2, 1, 1, 1, 1, -2, 10],
-  [-20, -50, -2, -2, -2, -2, -50, -20],
-  [100, -20, 10, 5, 5, 10, -20, 100],
-];
-
-/**
- * Creates an initial game board with starting pieces
- */
-export function createInitialBoard(): Board {
-  const board: Board = Array(8).fill(null).map(() => Array(8).fill(null));
-  
-  // Set up initial four pieces in the center
-  board[3][3] = 'white';
-  board[3][4] = 'black';
-  board[4][3] = 'black';
-  board[4][4] = 'white';
-  
-  return board;
-}
-
-/**
- * Checks if a position is within board boundaries
- */
-function isValidPosition(row: number, col: number): boolean {
-  return row >= 0 && row < 8 && col >= 0 && col < 8;
-}
-
-/**
- * Gets the opponent player
- */
-export function getOpponent(player: Player): Player {
-  return player === 'black' ? 'white' : 'black';
-}
-
-/**
- * Finds pieces that would be flipped for a move in a specific direction
- */
-function getFlipsInDirection(
-  board: Board,
-  row: number,
-  col: number,
-  direction: Position,
-  player: Player
-): Position[] {
-  const flips: Position[] = [];
-  const opponent = getOpponent(player);
-  
-  let currentRow = row + direction.row;
-  let currentCol = col + direction.col;
-  
-  // Collect opponent pieces in this direction
-  while (isValidPosition(currentRow, currentCol) && board[currentRow][currentCol] === opponent) {
-    flips.push({ row: currentRow, col: currentCol });
-    currentRow += direction.row;
-    currentCol += direction.col;
-  }
-  
-  // Valid only if we end on our own piece
-  if (flips.length > 0 && isValidPosition(currentRow, currentCol) && board[currentRow][currentCol] === player) {
-    return flips;
-  }
-  
-  return [];
-}
-
-/**
- * Calculates all valid moves for a player
- */
-export function getValidMoves(board: Board, player: Player): Move[] {
-  const moves: Move[] = [];
-  
-  for (let row = 0; row < 8; row++) {
-    for (let col = 0; col < 8; col++) {
-      // Skip non-empty cells
-      if (board[row][col] !== null) continue;
-      
-      const allFlips: Position[] = [];
-      
-      // Check all directions for flippable pieces
-      for (const direction of DIRECTIONS) {
-        const flips = getFlipsInDirection(board, row, col, direction, player);
-        allFlips.push(...flips);
-      }
-      
-      // Valid move if at least one piece can be flipped
-      if (allFlips.length > 0) {
-        moves.push({ row, col, flips: allFlips });
-      }
-    }
-  }
-  
-  return moves;
-}
-
-/**
- * Applies a move to the board and returns the new board state
- */
-export function applyMove(board: Board, move: Move, player: Player): Board {
-  const newBoard = board.map(row => [...row]);
-  
-  // Place the piece
-  newBoard[move.row][move.col] = player;
-  
-  // Flip captured pieces
-  for (const flip of move.flips) {
-    newBoard[flip.row][flip.col] = player;
-  }
-  
-  return newBoard;
-}
-
-/**
- * Counts pieces for each player
- */
-export function countPieces(board: Board): { black: number; white: number } {
-  let black = 0;
-  let white = 0;
-  
-  for (let row = 0; row < 8; row++) {
-    for (let col = 0; col < 8; col++) {
-      if (board[row][col] === 'black') black++;
-      else if (board[row][col] === 'white') white++;
-    }
-  }
-  
-  return { black, white };
-}
-
-/**
- * Evaluates the board state for AI decision making
- * Uses enhanced fuzzy logic system with multiple membership functions
- */
-function evaluateBoard(board: Board, player: Player): number {
-  // Import fuzzy evaluation dynamically to avoid circular deps
-  const { fuzzyEvaluateBoard } = require('./fuzzyLogic');
-  const result = fuzzyEvaluateBoard(board, player);
-  return result.finalScore;
-}
-
-/**
- * Get detailed AI evaluation for visualization
- */
-export function getAiEvaluation(board: Board, player: Player) {
-  const { fuzzyEvaluateBoard } = require('./fuzzyLogic');
-  return fuzzyEvaluateBoard(board, player);
-}
-
-/**
- * Get evaluations for all valid moves (for AI visualization)
- */
-export function evaluateAllMoves(board: Board, player: Player, depth: number = 3) {
-  const validMoves = getValidMoves(board, player);
-  const evaluations: { row: number; col: number; score: number }[] = [];
-  
-  for (const move of validMoves) {
-    const newBoard = applyMove(board, move, player);
-    const score = minimax(newBoard, depth - 1, -Infinity, Infinity, false, player);
-    evaluations.push({ row: move.row, col: move.col, score });
-  }
-  
-  // Sort by score descending
-  evaluations.sort((a, b) => b.score - a.score);
-  
-  return evaluations;
-}
-
-/**
- * Minimax algorithm with Alpha-Beta pruning for AI move selection
- */
-function minimax(
-  board: Board,
-  depth: number,
-  alpha: number,
-  beta: number,
-  maximizingPlayer: boolean,
-  aiPlayer: Player
-): number {
-  const currentPlayer = maximizingPlayer ? aiPlayer : getOpponent(aiPlayer);
-  const validMoves = getValidMoves(board, currentPlayer);
-  
-  // Terminal conditions
-  if (depth === 0 || validMoves.length === 0) {
-    return evaluateBoard(board, aiPlayer);
-  }
-  
-  if (maximizingPlayer) {
-    let maxEval = -Infinity;
-    for (const move of validMoves) {
-      const newBoard = applyMove(board, move, currentPlayer);
-      const evalScore = minimax(newBoard, depth - 1, alpha, beta, false, aiPlayer);
-      maxEval = Math.max(maxEval, evalScore);
-      alpha = Math.max(alpha, evalScore);
-      if (beta <= alpha) break; // Alpha-Beta pruning
-    }
-    return maxEval;
-  } else {
-    let minEval = Infinity;
-    for (const move of validMoves) {
-      const newBoard = applyMove(board, move, currentPlayer);
-      const evalScore = minimax(newBoard, depth - 1, alpha, beta, true, aiPlayer);
-      minEval = Math.min(minEval, evalScore);
-      beta = Math.min(beta, evalScore);
-      if (beta <= alpha) break; // Alpha-Beta pruning
-    }
-    return minEval;
-  }
-}
-
-/**
- * Selects the best move for the AI player
- */
-export function getAiMove(board: Board, player: Player, difficulty: number = 4): Move | null {
-  const validMoves = getValidMoves(board, player);
-  
-  if (validMoves.length === 0) return null;
-  
-  let bestMove = validMoves[0];
-  let bestScore = -Infinity;
-  
-  for (const move of validMoves) {
-    const newBoard = applyMove(board, move, player);
-    const score = minimax(newBoard, difficulty, -Infinity, Infinity, false, player);
-    
-    if (score > bestScore) {
-      bestScore = score;
-      bestMove = move;
-    }
-  }
-  
-  return bestMove;
-}
-
-/**
- * Creates the initial game state
- */
+// Create initial game state
 export function createInitialGameState(): GameState {
   const board = createInitialBoard();
   const validMoves = getValidMoves(board, 'black');
@@ -298,4 +63,322 @@ export function createInitialGameState(): GameState {
     winner: null,
     isAiThinking: false,
   };
+}
+
+// Create initial board with starting pieces
+export function createInitialBoard(): Board {
+  const board: Board = Array(8).fill(null).map(() => Array(8).fill(null));
+  
+  // Set initial 4 pieces in center
+  board[3][3] = 'white';
+  board[3][4] = 'black';
+  board[4][3] = 'black';
+  board[4][4] = 'white';
+  
+  return board;
+}
+
+// Deep clone board
+function cloneBoard(board: Board): Board {
+  return board.map(row => [...row]);
+}
+
+// Check if position is within board bounds
+function isValidPosition(row: number, col: number): boolean {
+  return row >= 0 && row < 8 && col >= 0 && col < 8;
+}
+
+// Get opponent player
+export function getOpponent(player: Player): Player {
+  return player === 'black' ? 'white' : 'black';
+}
+
+// Get all pieces that would be flipped for a move
+function getFlips(board: Board, row: number, col: number, player: Player): Position[] {
+  if (board[row][col] !== null) return [];
+  
+  const opponent = getOpponent(player);
+  const allFlips: Position[] = [];
+  
+  for (const [dr, dc] of DIRECTIONS) {
+    const lineFlips: Position[] = [];
+    let r = row + dr;
+    let c = col + dc;
+    
+    // Follow the line of opponent pieces
+    while (isValidPosition(r, c) && board[r][c] === opponent) {
+      lineFlips.push({ row: r, col: c });
+      r += dr;
+      c += dc;
+    }
+    
+    // If line ends with player's piece, add all flips
+    if (lineFlips.length > 0 && isValidPosition(r, c) && board[r][c] === player) {
+      allFlips.push(...lineFlips);
+    }
+  }
+  
+  return allFlips;
+}
+
+// Get all valid moves for a player
+export function getValidMoves(board: Board, player: Player): Move[] {
+  const moves: Move[] = [];
+  
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      const flips = getFlips(board, row, col, player);
+      if (flips.length > 0) {
+        moves.push({ row, col, flips });
+      }
+    }
+  }
+  
+  return moves;
+}
+
+// Apply a move to the board
+export function applyMove(board: Board, move: Move, player: Player): Board {
+  const newBoard = cloneBoard(board);
+  
+  // Place the piece
+  newBoard[move.row][move.col] = player;
+  
+  // Flip captured pieces
+  for (const flip of move.flips) {
+    newBoard[flip.row][flip.col] = player;
+  }
+  
+  return newBoard;
+}
+
+// Count pieces on the board
+export function countPieces(board: Board): { black: number; white: number } {
+  let black = 0;
+  let white = 0;
+  
+  for (const row of board) {
+    for (const cell of row) {
+      if (cell === 'black') black++;
+      else if (cell === 'white') white++;
+    }
+  }
+  
+  return { black, white };
+}
+
+// Count corners controlled by each player
+function countCorners(board: Board): { black: number; white: number } {
+  const corners = [[0, 0], [0, 7], [7, 0], [7, 7]];
+  let black = 0;
+  let white = 0;
+  
+  for (const [row, col] of corners) {
+    if (board[row][col] === 'black') black++;
+    else if (board[row][col] === 'white') white++;
+  }
+  
+  return { black, white };
+}
+
+// Simplified evaluation function for fast performance
+function evaluateBoard(board: Board, player: Player): number {
+  const opponent = getOpponent(player);
+  const pieces = countPieces(board);
+  const corners = countCorners(board);
+  const totalPieces = pieces.black + pieces.white;
+  
+  // Position score
+  let positionScore = 0;
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      if (board[row][col] === player) {
+        positionScore += POSITION_WEIGHTS[row][col];
+      } else if (board[row][col] === opponent) {
+        positionScore -= POSITION_WEIGHTS[row][col];
+      }
+    }
+  }
+  
+  // Mobility score
+  const playerMoves = getValidMoves(board, player).length;
+  const opponentMoves = getValidMoves(board, opponent).length;
+  const mobilityScore = (playerMoves - opponentMoves) * 5;
+  
+  // Corner score (very important)
+  const cornerScore = (
+    (player === 'black' ? corners.black : corners.white) -
+    (player === 'black' ? corners.white : corners.black)
+  ) * 25;
+  
+  // Piece count becomes more important in late game
+  const pieceWeight = totalPieces > 50 ? 2 : 0.5;
+  const pieceScore = (
+    (player === 'black' ? pieces.black : pieces.white) -
+    (player === 'black' ? pieces.white : pieces.black)
+  ) * pieceWeight;
+  
+  return positionScore + mobilityScore + cornerScore + pieceScore;
+}
+
+// Minimax with alpha-beta pruning - Optimized with reduced depth
+function minimax(
+  board: Board,
+  depth: number,
+  alpha: number,
+  beta: number,
+  isMaximizing: boolean,
+  player: Player,
+  maxDepth: number
+): number {
+  const currentPlayer = isMaximizing ? player : getOpponent(player);
+  const moves = getValidMoves(board, currentPlayer);
+  
+  // Terminal conditions
+  if (depth >= maxDepth || moves.length === 0) {
+    if (moves.length === 0) {
+      const opponentMoves = getValidMoves(board, getOpponent(currentPlayer));
+      if (opponentMoves.length === 0) {
+        // Game over
+        const pieces = countPieces(board);
+        const playerPieces = player === 'black' ? pieces.black : pieces.white;
+        const opponentPieces = player === 'black' ? pieces.white : pieces.black;
+        
+        if (playerPieces > opponentPieces) return 10000;
+        if (playerPieces < opponentPieces) return -10000;
+        return 0;
+      }
+    }
+    return evaluateBoard(board, player);
+  }
+  
+  if (isMaximizing) {
+    let maxEval = -Infinity;
+    for (const move of moves) {
+      const newBoard = applyMove(board, move, currentPlayer);
+      const eval_ = minimax(newBoard, depth + 1, alpha, beta, false, player, maxDepth);
+      maxEval = Math.max(maxEval, eval_);
+      alpha = Math.max(alpha, eval_);
+      if (beta <= alpha) break;
+    }
+    return maxEval;
+  } else {
+    let minEval = Infinity;
+    for (const move of moves) {
+      const newBoard = applyMove(board, move, currentPlayer);
+      const eval_ = minimax(newBoard, depth + 1, alpha, beta, true, player, maxDepth);
+      minEval = Math.min(minEval, eval_);
+      beta = Math.min(beta, eval_);
+      if (beta <= alpha) break;
+    }
+    return minEval;
+  }
+}
+
+// Get the best AI move - Ultra-optimized for web
+export function getAiMove(board: Board, player: Player, difficulty: number): Move | null {
+  const moves = getValidMoves(board, player);
+  if (moves.length === 0) return null;
+  
+  // Ultra-reduced depth: Easy=1, Medium=1, Hard=2 (max)
+  const maxDepth = difficulty >= 5 ? 2 : 1;
+  
+  // For very fast response, limit evaluated moves
+  const maxMovesToEvaluate = difficulty >= 5 ? 8 : 5;
+  
+  // Quick sort by position weight to prioritize good moves
+  const sortedMoves = moves
+    .map(m => ({ move: m, weight: POSITION_WEIGHTS[m.row][m.col] }))
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, maxMovesToEvaluate)
+    .map(m => m.move);
+  
+  let bestMove = sortedMoves[0];
+  let bestScore = -Infinity;
+  
+  for (const move of sortedMoves) {
+    const newBoard = applyMove(board, move, player);
+    const score = minimax(newBoard, 0, -Infinity, Infinity, false, player, maxDepth);
+    
+    if (score > bestScore) {
+      bestScore = score;
+      bestMove = move;
+    }
+  }
+  
+  return bestMove;
+}
+
+// Simplified AI evaluation for visualization
+export function getAiEvaluation(board: Board, player: Player): {
+  finalScore: number;
+  weights: {
+    position: number;
+    mobility: number;
+    corner: number;
+    stability: number;
+    pieces: number;
+  };
+} {
+  const opponent = getOpponent(player);
+  const pieces = countPieces(board);
+  const corners = countCorners(board);
+  const totalPieces = pieces.black + pieces.white;
+  
+  // Calculate individual scores
+  let positionScore = 0;
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      if (board[row][col] === player) {
+        positionScore += POSITION_WEIGHTS[row][col];
+      } else if (board[row][col] === opponent) {
+        positionScore -= POSITION_WEIGHTS[row][col];
+      }
+    }
+  }
+  
+  const playerMoves = getValidMoves(board, player).length;
+  const opponentMoves = getValidMoves(board, opponent).length;
+  const mobilityScore = playerMoves - opponentMoves;
+  
+  const playerCorners = player === 'black' ? corners.black : corners.white;
+  const opponentCorners = player === 'black' ? corners.white : corners.black;
+  const cornerScore = playerCorners - opponentCorners;
+  
+  const playerPieces = player === 'black' ? pieces.black : pieces.white;
+  const opponentPieces = player === 'black' ? pieces.white : pieces.black;
+  const pieceScore = playerPieces - opponentPieces;
+  
+  // Normalize weights based on game phase
+  const gameProgress = totalPieces / 64;
+  
+  return {
+    finalScore: positionScore * 0.3 + mobilityScore * 5 + cornerScore * 25 + pieceScore * (gameProgress > 0.7 ? 2 : 0.5),
+    weights: {
+      position: Math.min(1, Math.abs(positionScore) / 200),
+      mobility: Math.min(1, Math.abs(mobilityScore) / 10),
+      corner: Math.min(1, playerCorners / 4),
+      stability: gameProgress,
+      pieces: Math.min(1, playerPieces / 32),
+    }
+  };
+}
+
+// Evaluate all moves for visualization - Simplified version
+export function evaluateAllMoves(board: Board, player: Player, depth: number = 1): {
+  row: number;
+  col: number;
+  score: number;
+}[] {
+  const moves = getValidMoves(board, player);
+  
+  return moves.map(move => {
+    const newBoard = applyMove(board, move, player);
+    const score = evaluateBoard(newBoard, player);
+    return {
+      row: move.row,
+      col: move.col,
+      score,
+    };
+  }).sort((a, b) => b.score - a.score).slice(0, 5);
 }
