@@ -1,0 +1,291 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Core palette - Premium board game aesthetic */
+    --background: 30 15% 12%;
+    --foreground: 40 30% 92%;
+
+    --card: 30 18% 16%;
+    --card-foreground: 40 30% 92%;
+
+    --popover: 30 18% 14%;
+    --popover-foreground: 40 30% 92%;
+
+    /* Emerald green board accent */
+    --primary: 160 45% 35%;
+    --primary-foreground: 40 30% 95%;
+
+    /* Warm walnut wood tones */
+    --secondary: 28 35% 22%;
+    --secondary-foreground: 40 30% 92%;
+
+    --muted: 30 12% 20%;
+    --muted-foreground: 35 15% 55%;
+
+    /* Gold accent for highlights */
+    --accent: 45 85% 55%;
+    --accent-foreground: 30 15% 10%;
+
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 30 20% 25%;
+    --input: 30 20% 25%;
+    --ring: 160 45% 35%;
+
+    --radius: 0.5rem;
+
+    /* Game-specific tokens */
+    --board: 160 40% 28%;
+    --board-dark: 160 45% 22%;
+    --board-light: 160 35% 32%;
+    --board-grid: 160 30% 20%;
+    
+    --piece-white: 45 25% 88%;
+    --piece-white-highlight: 45 30% 95%;
+    --piece-black: 220 15% 12%;
+    --piece-black-highlight: 220 10% 20%;
+    
+    --valid-move: 45 90% 55%;
+    --hover-cell: 160 50% 40%;
+    --last-move: 45 70% 45%;
+
+    --sidebar-background: 30 18% 14%;
+    --sidebar-foreground: 40 30% 92%;
+    --sidebar-primary: 160 45% 35%;
+    --sidebar-primary-foreground: 40 30% 95%;
+    --sidebar-accent: 28 35% 22%;
+    --sidebar-accent-foreground: 40 30% 92%;
+    --sidebar-border: 30 20% 25%;
+    --sidebar-ring: 160 45% 35%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', serif;
+  }
+}
+
+@layer components {
+  .board-cell {
+    @apply relative transition-all duration-200 ease-out;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--board-light)) 0%,
+      hsl(var(--board)) 50%,
+      hsl(var(--board-dark)) 100%
+    );
+  }
+
+  .board-cell::after {
+    content: '';
+    @apply absolute inset-0 opacity-0 transition-opacity duration-200;
+    background: radial-gradient(
+      circle at center,
+      hsl(var(--hover-cell) / 0.3) 0%,
+      transparent 70%
+    );
+  }
+
+  .board-cell:hover::after {
+    @apply opacity-100;
+  }
+
+  .board-cell-valid::before {
+    content: '';
+    @apply absolute inset-1/4 rounded-full;
+    background: hsl(var(--valid-move) / 0.4);
+    animation: pulse-valid 2s ease-in-out infinite;
+  }
+
+  .board-cell-last {
+    box-shadow: inset 0 0 0 3px hsl(var(--last-move) / 0.6);
+  }
+
+  .piece {
+    @apply absolute rounded-full transition-all duration-300 ease-out;
+    top: 8%;
+    left: 8%;
+    width: 84%;
+    height: 84%;
+  }
+
+  .piece-white {
+    background: linear-gradient(
+      145deg,
+      hsl(var(--piece-white-highlight)) 0%,
+      hsl(var(--piece-white)) 50%,
+      hsl(35 20% 75%) 100%
+    );
+    box-shadow: 
+      0 4px 8px hsl(0 0% 0% / 0.3),
+      inset 0 2px 4px hsl(0 0% 100% / 0.4),
+      inset 0 -2px 4px hsl(0 0% 0% / 0.1);
+  }
+
+  .piece-black {
+    background: linear-gradient(
+      145deg,
+      hsl(var(--piece-black-highlight)) 0%,
+      hsl(var(--piece-black)) 50%,
+      hsl(220 20% 8%) 100%
+    );
+    box-shadow: 
+      0 4px 8px hsl(0 0% 0% / 0.4),
+      inset 0 2px 4px hsl(0 0% 100% / 0.1),
+      inset 0 -2px 4px hsl(0 0% 0% / 0.2);
+  }
+
+  .piece-flip {
+    animation: flip-piece 0.5s ease-in-out;
+  }
+
+  .piece-place {
+    animation: place-piece 0.3s ease-out;
+  }
+
+  .game-panel {
+    background: linear-gradient(
+      180deg,
+      hsl(var(--card)) 0%,
+      hsl(30 20% 14%) 100%
+    );
+    border: 1px solid hsl(var(--border));
+    box-shadow: 
+      0 8px 32px hsl(0 0% 0% / 0.3),
+      inset 0 1px 0 hsl(0 0% 100% / 0.05);
+  }
+
+  .btn-game {
+    @apply relative overflow-hidden px-6 py-3 font-medium transition-all duration-200;
+    background: linear-gradient(
+      180deg,
+      hsl(var(--primary)) 0%,
+      hsl(160 50% 28%) 100%
+    );
+    border: 1px solid hsl(160 40% 40% / 0.3);
+    box-shadow: 
+      0 4px 12px hsl(var(--primary) / 0.3),
+      inset 0 1px 0 hsl(0 0% 100% / 0.1);
+  }
+
+  .btn-game:hover {
+    transform: translateY(-2px);
+    box-shadow: 
+      0 6px 20px hsl(var(--primary) / 0.4),
+      inset 0 1px 0 hsl(0 0% 100% / 0.15);
+  }
+
+  .btn-game:active {
+    transform: translateY(0);
+  }
+
+  .score-indicator {
+    @apply relative;
+  }
+
+  .score-indicator-active::after {
+    content: '';
+    @apply absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full;
+    background: hsl(var(--accent));
+    animation: glow-pulse 1.5s ease-in-out infinite;
+  }
+
+  .thinking-indicator {
+    @apply flex gap-1;
+  }
+
+  .thinking-dot {
+    @apply w-2 h-2 rounded-full;
+    background: hsl(var(--accent));
+    animation: thinking-bounce 1.4s ease-in-out infinite;
+  }
+
+  .thinking-dot:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .thinking-dot:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@keyframes pulse-valid {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.6;
+  }
+}
+
+@keyframes flip-piece {
+  0% {
+    transform: rotateY(0deg);
+  }
+  50% {
+    transform: rotateY(90deg) scale(1.1);
+  }
+  100% {
+    transform: rotateY(0deg);
+  }
+}
+
+@keyframes place-piece {
+  0% {
+    transform: scale(0) translateY(-20px);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.1) translateY(0);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    opacity: 0.6;
+    box-shadow: 0 0 8px hsl(var(--accent) / 0.4);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 16px hsl(var(--accent) / 0.6);
+  }
+}
+
+@keyframes thinking-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
